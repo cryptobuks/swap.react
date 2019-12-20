@@ -19,7 +19,6 @@ import { Link as LinkTo } from 'react-router-dom'
 import { injectIntl, FormattedMessage } from 'react-intl'
 
 import Timer from '../Timer/Timer'
-import Logo from 'components/Logo/Logo'
 import { Button } from 'components/controls'
 import Input from 'components/forms/Input/Input'
 
@@ -135,21 +134,22 @@ export default class SwapProgress extends Component {
 
   componentWillUnmount() {
     this.swap.off('state update', this.handleFlowStateUpdate)
+    clearTimeout(this.timer)
   }
 
   reloadPage = () => {
-    this.timer =  setInterval(() => {
+    this.timer = setTimeout(() => {
       const startSwapTime = localStorage.getItem(constants.localStorage.startSwap)
 
-      if(this.swap.flow.isFinished) {
-        clearInterval(this.timer)
+      if (this.swap.flow.isFinished) {
+        clearTimeout(this.timer)
       }
 
       const isSwapPage = window.location.pathname.includes("swaps")
-      if ((Date.now() - startSwapTime) > 600 * 1000 && isSwapPage) {
+      if (((Date.now() - startSwapTime) > 600 * 1000) && isSwapPage) {
         console.warn('UPS!!! SWAP IS FROZEN - RELOAD')
         localStorage.removeItem(constants.localStorage.startSwap)
-        clearInterval(this.timer)
+        clearTimeout(this.timer)
         window.location.reload()
       }
     }, 1000)
@@ -359,31 +359,33 @@ export default class SwapProgress extends Component {
                 )
               }
 
-              { canRefund &&
+              {canRefund &&
                 <Fragment>
-                  { enabledButton
-                      ? (
-                          <Fragment>
-                            <div styleName="btnRefund">
-                              <Button gray onClick={this.tryRefund}>
-                                <FormattedMessage id="swapprogress270" defaultMessage="Try refund" />
-                              </Button>
-                            </div>
-                            { refundError &&
-                              <span styleName="tryAgain">
-                                <FormattedMessage id="swapprogress271" defaultMessage="Try again in a few minutes" />
-                              </span>
-                            }
-                          </Fragment>
-                        )
-                      : (
-                          <div styleName="timerRefund">
-                            <Timer
-                              lockTime={flow.btcScriptValues.lockTime * 1000}
-                              enabledButton={() => this.setState(() => ({ enabledButton: true }))}
-                            />
-                          </div>
-                        )
+                  {enabledButton
+                    ? (
+                      <Fragment>
+                        <div styleName="btnRefund">
+                          <Button gray onClick={this.tryRefund}>
+                            <FormattedMessage id="swapprogress270" defaultMessage="Try refund" />
+                          </Button>
+                        </div>
+                        {refundError &&
+                          <span styleName="tryAgain">
+                            <FormattedMessage id="swapprogress271" defaultMessage="Try again in a few minutes" />
+                          </span>
+                        }
+                      </Fragment>
+                    )
+                    : (
+                      <div styleName="timerRefund">
+                        <Timer
+                          isRefund
+                          lockTime={flow.btcScriptValues.lockTime * 1000}
+                          cancelTime={(flow.btcScriptValues.lockTime - 7200) * 1000}
+                          enabledButton={() => this.setState(() => ({ enabledButton: true }))}
+                        />
+                      </div>
+                    )
                   }
                 </Fragment>
               }
@@ -404,7 +406,7 @@ export default class SwapProgress extends Component {
               }
             </div>
 
-            {flow.ethSwapWithdrawTransactionHash && !this.isSellCurrencyEthOrEthToken &&  (
+            {flow.ethSwapWithdrawTransactionHash && !this.isSellCurrencyEthOrEthToken && (
               <strong styleName="transaction">
                 <a
                   href={`${config.link.etherscan}/tx/${flow.ethSwapWithdrawTransactionHash}`}

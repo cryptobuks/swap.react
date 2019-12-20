@@ -9,23 +9,29 @@ import reducers from 'redux/core/reducers'
 
 
 const sign = async () => {
-  const btcPrivateKey   = localStorage.getItem(constants.privateKeyNames.btc)
-  const bchPrivateKey   = localStorage.getItem(constants.privateKeyNames.bch)
-  const ltcPrivateKey   = localStorage.getItem(constants.privateKeyNames.ltc)
-  const ethPrivateKey   = localStorage.getItem(constants.privateKeyNames.eth)
-  const qtumPrivateKey  = localStorage.getItem(constants.privateKeyNames.qtum)
+  const btcPrivateKey = localStorage.getItem(constants.privateKeyNames.btc)
+  const btcMultisigPrivateKey = localStorage.getItem(constants.privateKeyNames.btcMultisig)
+  const btcMultisigSMSOwnerKey = config.swapContract.protectedBtcKey
+  const btcMultisigOwnerKey = localStorage.getItem(constants.privateKeyNames.btcMultisigOtherOwnerKey)
+  const bchPrivateKey = localStorage.getItem(constants.privateKeyNames.bch)
+  const ltcPrivateKey = localStorage.getItem(constants.privateKeyNames.ltc)
+  const ethPrivateKey = localStorage.getItem(constants.privateKeyNames.eth)
+  // const qtumPrivateKey        = localStorage.getItem(constants.privateKeyNames.qtum)
   // const xlmPrivateKey = localStorage.getItem(constants.privateKeyNames.xlm)
 
   const isEthKeychainActivated = !!localStorage.getItem(constants.privateKeyNames.ethKeychainPublicKey)
   const isBtcKeychainActivated = !!localStorage.getItem(constants.privateKeyNames.btcKeychainPublicKey)
+  const isBtcMultisigKeychainActivated = !!localStorage.getItem(constants.privateKeyNames.btcMultisigKeychainPublicKey)
 
   const _ethPrivateKey = isEthKeychainActivated ? await actions.eth.loginWithKeychain() : actions.eth.login(ethPrivateKey)
   const _btcPrivateKey = isBtcKeychainActivated ? await actions.btc.loginWithKeychain() : actions.btc.login(btcPrivateKey)
+  const _btcMultisigSMSPrivateKey = actions.btcmultisig.login_SMS(_btcPrivateKey, btcMultisigSMSOwnerKey)
+  const _btcMultisigPrivateKey = actions.btcmultisig.login_USER(_btcPrivateKey, btcMultisigOwnerKey)
 
   actions.bch.login(bchPrivateKey)
   // actions.usdt.login(btcPrivateKey)
   actions.ltc.login(ltcPrivateKey)
-  actions.qtum.login(qtumPrivateKey)
+  // actions.qtum.login(qtumPrivateKey)
   // actions.xlm.login(xlmPrivateKey)
 
   // if inside actions.token.login to call web3.eth.accounts.privateKeyToAccount passing public key instead of private key
@@ -38,37 +44,8 @@ const sign = async () => {
   }
   // await actions.nimiq.login(_ethPrivateKey)
 
-  const eosSign = async () => {
-    const eosActivePrivateKey = localStorage.getItem(constants.privateKeyNames.eosPrivateKey)
-    const eosActivePublicKey = localStorage.getItem(constants.privateKeyNames.eosPublicKey)
-    const eosAccount = localStorage.getItem(constants.privateKeyNames.eosAccount)
-
-    if (eosActivePrivateKey && eosActivePublicKey && eosAccount) {
-      await actions.eos.login(eosAccount, eosActivePrivateKey, eosActivePublicKey)
-      await actions.eos.waitAccountActivation()
-    }
-    else {
-      await actions.eos.loginWithNewAccount()
-    }
-
-    await actions.eos.getBalance()
-  }
-
-  const telosSign = async () => {
-    const telosActivePrivateKey = localStorage.getItem(constants.privateKeyNames.telosPrivateKey)
-    const telosActivePublicKey = localStorage.getItem(constants.privateKeyNames.telosPublicKey)
-    const telosAccount = localStorage.getItem(constants.privateKeyNames.telosAccount)
-
-    if (telosActivePrivateKey && telosActivePublicKey && telosAccount) {
-      actions.tlos.login(telosAccount, telosActivePrivateKey, telosActivePublicKey)
-    }
-    await actions.tlos.getBalance()
-  }
-
   const getReputation = actions.user.getReputation()
 
-  await eosSign()
-  await telosSign()
   await getReputation()
 }
 
@@ -98,12 +75,12 @@ const getReputation = async () => {
 const getBalances = () => {
   actions.eth.getBalance()
   actions.btc.getBalance()
+  actions.btcmultisig.getBalance() // SMS-Protected
+  actions.btcmultisig.getBalanceUser() //Other user confirm
   actions.bch.getBalance()
   actions.ltc.getBalance()
   // actions.usdt.getBalance()
-  actions.eos.getBalance()
-  actions.tlos.getBalance()
-  actions.qtum.getBalance()
+  // actions.qtum.getBalance()
   // actions.xlm.getBalance()
 
   Object.keys(config.erc20)
@@ -113,7 +90,7 @@ const getBalances = () => {
   // actions.nimiq.getBalance()
 }
 
-const getDemoMoney = process.env.MAINNET ? () => {} : () => {
+const getDemoMoney = process.env.MAINNET ? () => { } : () => {
   // googe bitcoin (or rinkeby) faucet
   request.get('https://swap.wpmix.net/demokeys.php', {})
     .then((r) => {
@@ -129,7 +106,7 @@ const getExchangeRate = (sellCurrency, buyCurrency) =>
   new Promise((resolve, reject) => {
     const url = `https://api.cryptonator.com/api/full/${sellCurrency}-${buyCurrency}`
 
-    request.get(url).then(({ ticker: { price: exchangeRate } })  => {
+    request.get(url).then(({ ticker: { price: exchangeRate } }) => {
       resolve(exchangeRate)
     })
       .catch(() => {
@@ -153,6 +130,11 @@ const setTransactions = async () => {
   try {
     const mainTokens = await Promise.all([
       actions.btc.getTransaction(),
+      actions.btc.getInvoices(),
+      actions.btcmultisig.getTransactionSMS(),
+      actions.btcmultisig.getInvoicesSMS(),
+      actions.btcmultisig.getTransactionUser(),
+      actions.btcmultisig.getInvoicesUser(),
       actions.bch.getTransaction(),
       // actions.usdt.getTransaction(),
       actions.eth.getTransaction(),
@@ -177,7 +159,7 @@ const setTransactions = async () => {
 }
 
 const getText = () => {
-  const { user : { ethData, btcData, eosData, /* xlmData, */ telosData, bchData, ltcData } } = getState()
+  const { user: { ethData, btcData, /* xlmData, */bchData, ltcData } } = getState()
 
 
   let text = `
@@ -221,9 +203,9 @@ Private key: ${ltcData.privateKey}\r\n
 3. Go to settings > addresses > import\r\n
 4. paste private key and click "Ok"\r\n
 \r\n
-# BITCOINCACHE\r\n
+# BITCOINCASH\r\n
 \r\n
-BitcoinCache address: ${bchData.address}\r\n
+Bitcoin Cash address: ${bchData.address}\r\n
 Private key: ${bchData.privateKey}\r\n
 \r\n
 1. Go to blockchain.info\r\n
@@ -231,27 +213,14 @@ Private key: ${bchData.privateKey}\r\n
 3. Go to settings > addresses > import\r\n
 4. paste private key and click "Ok"\r\n
 `
-/*
-# XLM\r\n
-\r\n
-XLM Private Key: ${xlmData.keypair.secret()}\r\n
-Address name: ${xlmData.address}\r\n
-\r\n
-`
-*/
-  if (eosData.activePrivateKey) {
-    text = `
-${text}
-# EOS\r\n
-\r\n
-EOS Master Private Key: ${eosData.activePrivateKey}\r\n
-Account name: ${eosData.address}\r\n
-\r\n
-# TELOS\r\n
-\r\n
-TELOS Active Private Key: ${telosData.activePrivateKey}\r\n
-Account name: ${telosData.address}\r\n`
-  }
+  /*
+  # XLM\r\n
+  \r\n
+  XLM Private Key: ${xlmData.keypair.secret()}\r\n
+  Address name: ${xlmData.address}\r\n
+  \r\n
+  `
+  */
 
   return text
 }

@@ -5,12 +5,13 @@ import ClickOutside from 'react-click-outside'
 import Link from 'sw-valuelink'
 
 import cssModules from 'react-css-modules'
-import styles from './DropDown.scss'
 
 import toggle from 'decorators/toggle'
 import FieldLabel from 'components/forms/FieldLabel/FieldLabel'
 import Tooltip from 'components/ui/Tooltip/Tooltip'
 import Input from 'components/forms/Input/Input'
+
+import styles from './DropDown.scss'
 
 import closeBtn from './images/close.svg'
 
@@ -24,10 +25,7 @@ export default class DropDown extends Component {
       PropTypes.string,
       PropTypes.number,
     ]),
-    selectedValue: PropTypes.objectOf([
-      PropTypes.string,
-      PropTypes.number,
-    ]),
+    selectedValue: PropTypes.string.isRequired,
     items: PropTypes.arrayOf(PropTypes.any).isRequired,
     selectedItemRender: PropTypes.func,
     itemRender: PropTypes.func,

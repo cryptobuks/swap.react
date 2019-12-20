@@ -1,63 +1,80 @@
-import React, { Component } from 'react'
+import React, { Component, Fragment } from 'react'
+import Slider from 'react-slick';
 import PropTypes from 'prop-types'
 
-import { isMobile } from 'react-device-detect'
 import { connect } from 'redaction'
-import { constants } from 'helpers'
-import { localisedUrl } from 'helpers/locale'
-import firestore from 'helpers/firebase/firestore'
 import actions from 'redux/actions'
-import { withRouter } from 'react-router'
-import {
-  hasSignificantBalance,
-  hasNonZeroBalance,
-  notTestUnit,
-} from 'helpers/user'
-import moment from 'moment'
 
-import CSSModules from 'react-css-modules'
-import stylesWallet from './Wallet.scss'
+import cssModules from 'react-css-modules'
+import styles from './Wallet.scss'
+import { isMobile } from 'react-device-detect'
 
-import Row from './Row/Row'
-import Table from 'components/tables/Table/Table'
-import { WithdrawButton } from 'components/controls'
-import styles from 'components/tables/Table/Table.scss'
-import PageHeadline from 'components/PageHeadline/PageHeadline'
-import PageSeo from 'components/Seo/PageSeo'
-import PartialClosure from 'pages/PartialClosure/PartialClosure'
-import SubTitle from 'components/PageHeadline/SubTitle/SubTitle'
-import KeyActionsPanel from 'components/KeyActionsPanel/KeyActionsPanel'
-import SaveKeysModal from 'components/modals/SaveKeysModal/SaveKeysModal'
-import { FormattedMessage, injectIntl, defineMessages } from 'react-intl'
-import Referral from 'components/Footer/Referral/Referral'
+import History from 'pages/History/History'
+import NotifyBlock from './components/NotityBlock/NotifyBock'
+
+import security from './components/NotityBlock/images/security.svg'
+import mail from './components/NotityBlock/images/mail.svg'
+import info from './components/NotityBlock/images/info-solid.svg'
+
+import { links, constants } from 'helpers'
+import { localisedUrl } from 'helpers/locale'
+import ReactTooltip from 'react-tooltip'
+import ParticalClosure from "../PartialClosure/PartialClosure"
+
+import { FormattedMessage, injectIntl } from 'react-intl'
 
 import config from 'app-config'
+import { withRouter } from 'react-router'
+import BalanceForm from './components/BalanceForm/BalanceForm'
+import CurrenciesList from './CurrenciesList'
+import InlineLoader from 'components/loaders/InlineLoader/InlineLoader'
 
+const walletNav = ['My balances', 'Transactions'];
 
-const isWidgetBuild = config && config.isWidget
 
 @connect(({
   core: { hiddenCoinsList },
   user: {
     ethData,
     btcData,
+    btcMultisigSMSData,
+    btcMultisigUserData,
     bchData,
     tokensData,
-    eosData,
-    telosData,
     ltcData,
-    qtumData,
+    // qtumData,
     // usdtOmniData,
     // nimData,
     // xlmData,
   },
   currencies: { items: currencies },
+  createWallet: { currencies: assets },
 }) => {
   const tokens = (
     config && config.isWidget
-      ? [ config.erc20token.toUpperCase() ]
+      ? [config.erc20token.toUpperCase()]
       : Object.keys(tokensData).map(k => tokensData[k].currency)
   )
+
+  const tokensItems = (
+    Object.keys(tokensData).map(k => tokensData[k])
+  )
+
+  const allData = [
+    btcData,
+    btcMultisigSMSData,
+    btcMultisigUserData,
+    ethData,
+    bchData,
+    ltcData,
+    //qtumData,
+    // xlmData,
+    // usdtOmniData,
+    ...Object.keys(tokensData).map(k => (tokensData[k])),
+  ]
+    .map(({ account, keyPair, ...data }) => ({
+      ...data,
+    }))
 
   const items = (
     config && config.isWidget ? [
@@ -65,32 +82,31 @@ const isWidgetBuild = config && config.isWidget
       ethData,
       // usdtOmniData,
     ] : [
-      btcData,
-      bchData,
-      ethData,
-      eosData,
-      telosData,
-      ltcData,
-      qtumData,
-      // usdtOmniData,
-      // nimData,
-      // xlmData,
-    ]
+        btcData,
+        btcMultisigSMSData,
+        btcMultisigUserData,
+        bchData,
+        ethData,
+        ltcData,
+        // qtumData,
+        // usdtOmniData,
+        // nimData,
+        // xlmData,
+      ]
   )
     .map(data => data.currency)
 
   const currencyBalance = [
     btcData,
+    btcMultisigSMSData,
+    btcMultisigUserData,
     bchData,
     ethData,
-    eosData,
-    telosData,
     ltcData,
-    qtumData,
+    // qtumData,
     // usdtOmniData,
     // nimData,
     // xlmData,
-    ...Object.keys(tokensData).map(k => tokensData[k]),
   ]
     .map(({ balance, currency }) => ({
       balance,
@@ -100,301 +116,322 @@ const isWidgetBuild = config && config.isWidget
   return {
     tokens,
     items,
+    allData,
+    tokensItems,
     currencyBalance,
     currencies,
+    assets,
     hiddenCoinsList: config && config.isWidget ? [] : hiddenCoinsList,
     userEthAddress: ethData.address,
     tokensData: {
       ethData,
       btcData,
+      btcMultisigSMSData,
+      btcMultisigUserData,
       bchData,
       ltcData,
-      eosData,
-      telosData,
-      qtumData,
+      // qtumData,
       // usdtOmniData,
     },
   }
 })
 @injectIntl
 @withRouter
-@CSSModules(stylesWallet, { allowMultiple: true })
+@connect(({ signUp: { isSigned } }) => ({
+  isSigned
+}))
+
+@cssModules(styles, { allowMultiple: true })
 export default class Wallet extends Component {
 
-  static propTypes = {
-    currencies: PropTypes.array,
-    hiddenCoinsList: PropTypes.array,
-    history: PropTypes.object,
-    items: PropTypes.arrayOf(PropTypes.string),
-    tokens: PropTypes.arrayOf(PropTypes.string),
-    location: PropTypes.object,
-    intl: PropTypes.object.isRequired,
-  };
-
   state = {
-    saveKeys: false,
-    openModal: false,
-    isShowingPromoText: false,
-  };
+    activeView: 0,
+    isFetching: false,
+    btcBalance: 0,
+    activeCurrency: 'usd',
+    exchangeForm: false,
+    walletTitle: 'Wallet',
+    editTitle: false
+  }
 
   componentWillMount() {
     actions.user.getBalances()
-    // actions.analytics.dataEvent('open-page-balances')
+  }
 
-    this.checkImportKeyHash()
+  componentDidMount() {
+    const { params, url } = this.props.match
 
-    if (process.env.MAINNET) {
-      localStorage.setItem(constants.localStorage.testnetSkip, false)
-    } else {
-      localStorage.setItem(constants.localStorage.testnetSkip, true)
+    if (url.includes('withdraw')) {
+      this.handleWithdraw(params)
     }
 
-    const testSkip = JSON.parse(
-      localStorage.getItem(constants.localStorage.testnetSkip)
-    )
-    const saveKeys = JSON.parse(
-      localStorage.getItem(constants.localStorage.privateKeysSaved)
-    )
+    this.showPercentChange1H();
+    this.getUsdBalance();
+    this.setLocalStorageItems();
+  }
+
+  handleNavItemClick = (index) => {
+    if (index === 1) {
+      // fetch actual tx list
+      actions.user.setTransactions()
+      actions.core.getSwapHistory()
+    }
+
+    this.setState({
+      activeView: index
+    })
+  }
+
+  handleSaveKeys = () => {
+    actions.modals.open(constants.modals.PrivateKeys)
+  }
+
+
+  handleShowKeys = () => {
+    actions.modals.open(constants.modals.DownloadModal)
+  }
+
+  setLocalStorageItems = () => {
+    const isClosedNotifyBlockBanner = localStorage.getItem(constants.localStorage.isClosedNotifyBlockBanner);
+    const isClosedNotifyBlockSignUp = localStorage.getItem(constants.localStorage.isClosedNotifyBlockSignUp);
+    const isPrivateKeysSaved = localStorage.getItem(constants.localStorage.privateKeysSaved)
+    const walletTitle = localStorage.getItem(constants.localStorage.walletTitle);
+
+    this.setState({
+      isClosedNotifyBlockBanner,
+      isClosedNotifyBlockSignUp,
+      walletTitle,
+      isPrivateKeysSaved
+    })
+  }
+
+  getUsdBalance = async () => {
+    const exCurrencyRate = await actions.user.getExchangeRate('BTC', 'usd')
 
     this.setState(() => ({
-      testSkip,
-      saveKeys,
+      exCurrencyRate
     }))
   }
 
-  componentWillReceiveProps() {
-    const { currencyBalance } = this.props
-
-    const hasAtLeastTenDollarBalance = hasSignificantBalance(currencyBalance)
-
-    if (process.env.MAINNET && hasAtLeastTenDollarBalance) {
-      this.setState({ isShowingPromoText: true })
-    }
+  handleSignUp = () => {
+    actions.modals.open(constants.modals.SignUp)
   }
 
-  shouldComponentUpdate(nextProps, nextState) {
-    const getComparableProps = props => ({
-      items: props.items,
-      currencyBalance: props.currencyBalance,
-      tokens: props.tokens,
-      currencies: props.currencies,
-      hiddenCoinsList: props.hiddenCoinsList,
+  handleNotifyBlockClose = (state) => {
+    this.setState({
+      [state]: true
     })
-    return (
-      JSON.stringify({
-        ...getComparableProps(this.props),
-        ...this.state,
-      }) !==
-      JSON.stringify({
-        ...getComparableProps(nextProps),
-        ...nextState,
-      })
-    )
+    localStorage.setItem(constants.localStorage[state], 'true')
   }
 
-  forceCautionUserSaveMoney = () => {
-    const { currencyBalance } = this.props
 
-    const hasNonZeroCurrencyBalance = hasNonZeroBalance(currencyBalance)
-    const isNotTestUser = notTestUnit(currencyBalance)
-    const doesCautionPassed = localStorage.getItem(
-      constants.localStorage.wasCautionPassed
-    )
 
-    if (
-      !doesCautionPassed &&
-      (hasNonZeroCurrencyBalance || isNotTestUser) &&
-      process.env.MAINNET
-    ) {
-      actions.modals.open(constants.modals.PrivateKeys, {})
-    }
-  };
+  showPercentChange1H = () => {
+    const { currencies, currencyBalance } = this.props
+    let infoAboutCurrency = []
 
-  checkImportKeyHash = () => {
+    this.setState({
+      isFetching: true
+    })
+
+    fetch('https://noxon.io/cursAll.php')
+      .then(res => res.json())
+      .then(
+        (result) => {
+          const itemsName = currencies.map(el => el.name)
+          result.map(res => {
+            const btcBalance = currencyBalance.find(item => item.name === res.symbol)
+            if (itemsName.includes(res.symbol)) {
+              try {
+                infoAboutCurrency.push({
+                  name: res.symbol,
+                  change: res.percent_change_1h,
+                  price_btc: res.price_btc,
+                  balance: btcBalance.balance * res.price_btc
+                })
+                /* SMS Protected and Multisign */
+                if (res.symbol === 'BTC') {
+                  infoAboutCurrency.push({
+                    name: 'BTC (SMS-Protected)',
+                    change: res.percent_change_1h,
+                    price_btc: res.price_btc,
+                    balance: btcBalance.balance * res.price_btc
+                  })
+                }
+              } catch (e) { }
+            }
+            this.setState({
+              infoAboutCurrency,
+              isFetching: false
+            })
+          })
+        },
+        (error) => {
+          console.log('error on fetch data from api')
+        }
+      )
+  }
+
+  handleWithdraw = (params) => {
+    const { allData } = this.props
+    const { address, amount } = params
+    const item = allData.find(({ currency }) => currency.toLowerCase() === params.currency.toLowerCase())
+
+    actions.modals.open(constants.modals.Withdraw, { ...item, toAddress: address, amount })
+  }
+
+  goToСreateWallet = () => {
+    const { history, intl: { locale } } = this.props
+    history.push(localisedUrl(locale, '/createWallet'))
+  }
+
+  handleEditTitle = () => {
+    this.setState({
+      editTitle: true
+    })
+  }
+
+  handleChangeTitle = (e) => {
+    this.setState({
+      walletTitle: e.target.value
+    })
+    localStorage.setItem(constants.localStorage.walletTitle, e.target.value)
+  }
+
+
+  handleModalOpen = (context) => {
     const {
-      history,
-      intl: { locale },
-    } = this.props
+      items,
+      tokensData,
+      tokensItems,
+      tokens,
+      hiddenCoinsList
+    } = this.props;
 
-    const urlHash = history.location.hash
-    const importKeysHash = '#importKeys'
 
-    if (!urlHash) {
-      return
-    }
+    const currencyTokenData = [...Object.keys(tokensData).map(k => (tokensData[k])), ...tokensItems]
 
-    if (urlHash !== importKeysHash) {
-      return
-    }
+    const tableRows = [...items, ...tokens].filter(currency => !hiddenCoinsList.includes(currency))
 
-    localStorage.setItem(constants.localStorage.privateKeysSaved, true)
-    localStorage.setItem(constants.localStorage.firstStart, true)
-
-    actions.modals.open(constants.modals.ImportKeys, {
-      onClose: () => {
-        history.replace(localisedUrl(locale, '/'))
-      },
+    const currencies = tableRows.map(currency => {
+      return currencyTokenData.find(item => item.currency === currency);
     })
-  };
 
-  checkBalance = () => {
-    const now = moment().format('HH:mm:ss DD/MM/YYYY')
-    const lastCheck =
-      localStorage.getItem(constants.localStorage.lastCheckBalance) || now
-    const lastCheckMoment = moment(lastCheck, 'HH:mm:ss DD/MM/YYYY')
-
-    const isFirstCheck = moment(now, 'HH:mm:ss DD/MM/YYYY').isSame(
-      lastCheckMoment
-    )
-    const isOneHourAfter = moment(now, 'HH:mm:ss DD/MM/YYYY').isAfter(
-      lastCheckMoment.add(1, 'hours')
-    )
-
-    const { ethData, btcData, bchData, ltcData } = this.props.tokensData
-
-    const balancesData = {
-      ethBalance: ethData.balance,
-      btcBalance: btcData.balance,
-      bchBalance: bchData.balance,
-      ltcBalance: ltcData.balance,
-      ethAddress: ethData.address,
-      btcAddress: btcData.address,
-      bchAddress: bchData.address,
-      ltcAddress: ltcData.address,
-    }
-
-    if (isOneHourAfter || isFirstCheck) {
-      localStorage.setItem(constants.localStorage.lastCheckBalance, now)
-      firestore.updateUserData(balancesData)
-    }
-  };
+    actions.modals.open(constants.modals.CurrencyAction, { currencies, context })
+  }
 
   render() {
     const {
+      activeView,
+      infoAboutCurrency,
+      isFetching,
+      exCurrencyRate,
+      exchangeForm,
+      isClosedNotifyBlockBanner,
+      isClosedNotifyBlockSignUp,
+      editTitle,
+      walletTitle,
+      isPrivateKeysSaved
+    } = this.state;
+    const {
       items,
       tokens,
-      currencies,
+      currencyBalance,
       hiddenCoinsList,
-      intl,
-      location,
+      isSigned,
+      allData,
     } = this.props
-    const { isShowingPromoText } = this.state
 
-    this.checkBalance()
-    const titles = [
-      <FormattedMessage id="Wallet114" defaultMessage="Coin" />,
-      <FormattedMessage id="Wallet115" defaultMessage="Name" />,
-      <FormattedMessage id="Wallet116" defaultMessage="Balance" />,
-      <FormattedMessage id="Wallet117" defaultMessage="Your Address" />,
-      isMobile ? (
-        <FormattedMessage id="Wallet118" defaultMessage="Send, receive, swap" />
-      ) : (
-        <FormattedMessage id="Wallet119" defaultMessage="Actions" />
-      ),
-    ]
 
-    const titleSwapOnline = defineMessages({
-      metaTitle: {
-        id: 'Wallet140',
-        defaultMessage:
-          'Swap.Online - Cryptocurrency Wallet with Atomic Swap Exchange',
-      },
-    })
-    const titleWidgetBuild = defineMessages({
-      metaTitle: {
-        id: 'WalletWidgetBuildTitle',
-        defaultMessage: 'Cryptocurrency Wallet with Atomic Swap Exchange',
-      },
-    })
-    const title = isWidgetBuild ? titleWidgetBuild : titleSwapOnline
+    let settings = {
+      infinite: true,
+      speed: 500,
+      autoplay: true,
+      autoplaySpeed: 6000,
+      fade: true,
+      slidesToShow: 1,
+      slidesToScroll: 1
+    };
 
-    const description = defineMessages({
-      metaDescription: {
-        id: 'Wallet146',
-        defaultMessage: `Our online wallet with Atomic swap algorithms will help you store and exchange cryptocurrency instantly
-        and more secure without third-parties. Decentralized exchange.`,
-      },
-    })
+    let btcBalance = null;
+    let usdBalance = 0;
 
-    const sectionWalletStyleName = isMobile
-      ? 'sectionWalletMobile'
-      : 'sectionWallet'
+    const tableRows = allData.filter(({ currency, balance }) => !hiddenCoinsList.includes(currency) || balance > 0)
 
-    this.forceCautionUserSaveMoney()
-
-    const tableRows = [ ...items, ...tokens ].filter(currency => !hiddenCoinsList.includes(currency))
+    if (currencyBalance) {
+      currencyBalance.forEach(item => {
+        btcBalance += item.balance
+        usdBalance = btcBalance * exCurrencyRate;
+      })
+    }
 
     return (
-      <section
-        styleName={
-          isWidgetBuild
-            ? `${sectionWalletStyleName} ${sectionWalletStyleName}_widget`
-            : sectionWalletStyleName
-        }
-      >
-        <PageSeo
-          location={location}
-          defaultTitle={intl.formatMessage(title.metaTitle)}
-          defaultDescription={intl.formatMessage(description.metaDescription)}
-        />
-        <PageHeadline
-          styleName={isWidgetBuild ? 'pageLine pageLine_widget' : 'pageLine'}
-        >
-          <SubTitle>
-            <FormattedMessage
-              id="Wallet104"
-              defaultMessage="Your online cryptocurrency wallet"
-            />
-          </SubTitle>
-        </PageHeadline>
-        <KeyActionsPanel />
-
-        {!isShowingPromoText && (
-          <div styleName="depositText">
-            <FormattedMessage
-              id="Wallet137"
-              defaultMessage="Deposit funds to addresses below"
-            />
-          </div>
-        )}
-
-        <Table
-          id="table-wallet"
-          className={styles.wallet}
-          titles={titles}
-          rows={tableRows}
-          rowRender={(row, index, selectId, handleSelectId) => (
-            <Row
-              key={row}
-              index={index}
-              currency={row}
-              currencies={currencies}
-              hiddenCoinsList={hiddenCoinsList}
-              selectId={selectId}
-              handleSelectId={handleSelectId}
-            />
-          )}
-        />
-        {config && !config.isWidget && (
-          <div styleName="inform">
-            <Referral address={this.props.userEthAddress} />
-            <h2 styleName="informHeading">
-              <FormattedMessage
-                id="Wallet364"
-                defaultMessage="Wallet based on the Atomic Swap technology"
+      <artical>
+        <section styleName="wallet">
+          {(walletTitle === '' || editTitle) ? <input styleName="inputTitle" onChange={(e) => this.handleChangeTitle(e)} value={walletTitle} /> : <h3 styleName="walletHeading" onDoubleClick={this.handleEditTitle}>{walletTitle || 'Wallet'}</h3>}
+          <Slider {...settings}>
+            {
+              !isPrivateKeysSaved && <NotifyBlock
+                className="notifyBlockSaveKeys"
+                descr="Before you continue be sure to save your private keys!"
+                tooltip="We do not store your private keys and will not be able to restore them"
+                icon={security}
+                firstBtn="Show my keys"
+                firstFunc={this.handleShowKeys}
+                secondBtn="I saved my keys"
+                secondFunc={this.handleSaveKeys}
               />
-            </h2>
-            <FormattedMessage
-              id="Wallet156"
-              // eslint-disable-next-line
-              defaultMessage="Welcome to Swap.Online, a decentralized cross-chain wallet based on Atomic Swap technology.{br}Here you can safely store and promptly exchange Bitcoin, Ethereum, EOS, USD, Tether, BCH, and numerous ERC-20 tokens.{br}{br}Swap.Online doesn’t store your keys or tokens. Our wallet operates directly within your browser, so no additional installations or downloads are required.{br}The Swap.Online service is fully decentralized.  All operations with tokens are executed via the IPFS network.{br}{br}Our team was the first to finalize Atomic Swaps with USDT and EOS in September 2018 and Litecoin blockchain was added in October 2018.{br}Our wallet addresses real multi-chain integration with a decentralized order book - no third party involved in the exchange, no proxy-token and no token wrapping.{br}We can integrate any ERC-20 token of a project for free!  We just ask for a mutually beneficial PR announcement!{br}{br}In addition, we developed Swap.Button, a b2b-solution to exchange all kinds of tokens for Bitcoin and Ethereum.{br}Install Swap.Button html widget on your site and collect crypto investments for your project.{br}{br}Start using https://swap.online/ today and enjoy the power of true decentralization."
-              values={{
-                br: <br />,
-              }}
-            />
+            }
+            {
+              !isSigned && !isClosedNotifyBlockSignUp && <NotifyBlock
+                className="notifyBlockSignUp"
+                descr="Sign up and get your free cryptocurrency for test!"
+                tooltip="You will also be able to receive notifications regarding updates with your account"
+                icon={mail}
+                firstBtn="Sign Up"
+                firstFunc={this.handleSignUp}
+                secondBtn="I’ll do this later"
+                secondFunc={() => this.handleNotifyBlockClose('isClosedNotifyBlockSignUp')} />
+            }
+            {
+              !isClosedNotifyBlockBanner && <NotifyBlock
+                className="notifyBlockBanner"
+                descr="Updates"
+                tooltip="Let us notify you that the main domain name for Swap.online exchange service will be changed from swap.online to swaponline.io."
+                icon={info}
+                secondBtn="Close"
+                secondFunc={() => this.handleNotifyBlockClose('isClosedNotifyBlockBanner')} />
+            }
+          </Slider>
+          {!isMobile && <ul styleName="walletNav">
+            {walletNav.map((item, index) => (
+              <li
+                key={item}
+                styleName={`walletNavItem ${activeView === index ? 'active' : ''}`}
+                onClick={() => this.handleNavItemClick(index)}
+              >
+                <a href styleName="walletNavItemLink">
+                  {item}
+                </a>
+              </li>))}
+          </ul>}
+          <div className="data-tut-store" styleName="walletContent" >
+            <div styleName={`walletBalance ${activeView === 0 ? 'active' : ''}`}>
+              <BalanceForm usdBalance={usdBalance} currencyBalance={btcBalance} handleReceive={this.handleModalOpen} handleWithdraw={this.handleModalOpen} currency="btc" infoAboutCurrency={infoAboutCurrency} />
+              {exchangeForm &&
+                <div styleName="exchangeForm">
+                  <ParticalClosure {...this.props} isOnlyForm />
+                </div>
+              }
+            </div>
+            <CurrenciesList tableRows={tableRows} {...this.state} {...this.props} goToСreateWallet={this.goToСreateWallet}/>
+            <div styleName={`activity ${activeView === 1 ? 'active' : ''}`}>
+              <h3 styleName="activityHeading">Activity</h3>
+              <History></History>
+            </div>
           </div>
-        )}
-      </section>
+        </section>
+      </artical>
     )
   }
 }

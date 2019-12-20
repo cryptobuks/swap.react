@@ -35,12 +35,15 @@ const userLanguage = (navigator.userLanguage || navigator.language || 'en-gb').s
 moment.locale(userLanguage)
 
 @withRouter
-@connect({
+@connect(({
+  currencies: { items: currencies },
+}) => ({
+  currencies,
   isVisible: 'loader.isVisible',
   ethAddress: 'user.ethData.address',
   btcAddress: 'user.btcData.address',
   tokenAddress: 'user.tokensData.swap.address',
-})
+}))
 @CSSModules(styles, { allowMultiple: true })
 export default class App extends React.Component {
 
@@ -53,6 +56,12 @@ export default class App extends React.Component {
 
     this.localStorageListener = null
 
+    this.prvMultiTab = {
+      reject: null,
+      enter: null,
+      switch: null,
+    }
+
     this.state = {
       fetching: false,
       multiTabs: false,
@@ -60,20 +69,82 @@ export default class App extends React.Component {
     }
   }
 
-  componentWillMount() {
-    const myId = Date.now().toString()
-    localStorage.setItem(constants.localStorage.enter, myId)
-    const enterSub = localStorage.subscribe(constants.localStorage.enter, () => {
-      localStorage.setItem(constants.localStorage.reject, myId)
+  generadeId(callback) {
+    const newId = Date.now().toString()
+
+    this.setState({
+      appID: newId,
+    }, () => {
+      callback(newId)
     })
-    const rejectSub = localStorage.subscribe(constants.localStorage.reject, (id) => {
-      if (id && id !== myId) {
-        this.setState({ multiTabs: true })
-        localStorage.unsubscribe(rejectSub)
-        localStorage.unsubscribe(enterSub)
-        localStorage.removeItem(constants.localStorage.reject)
+  }
+
+  preventMultiTabs(isSwitch) {
+    this.generadeId((newId) => {
+      if (isSwitch) {
+        localStorage.setItem(constants.localStorage.switch, newId)
       }
+
+      const onRejectHandle = () => {
+        const { appID } = this.state
+        const id = localStorage.getItem(constants.localStorage.reject)
+
+        if (id && id !== appID) {
+          this.setState({ multiTabs: true })
+          localStorage.unsubscribe(this.prvMultiTab.reject)
+          localStorage.unsubscribe(this.prvMultiTab.enter)
+          localStorage.unsubscribe(this.prvMultiTab.switch)
+          localStorage.removeItem(constants.localStorage.reject)
+        }
+      }
+
+      const onEnterHandle = () => {
+        const { appID } = this.state
+        const id = localStorage.getItem(constants.localStorage.enter)
+        const switchId = localStorage.getItem(constants.localStorage.switch)
+
+        if (switchId && switchId === id) return
+
+        localStorage.setItem(constants.localStorage.reject, appID)
+      }
+
+      const onSwitchHangle = () => {
+        const switchId = localStorage.getItem(constants.localStorage.switch)
+        const { appID } = this.state
+
+        if (appID !== switchId) {
+          this.setState({
+            multiTabs: true,
+          })
+          localStorage.unsubscribe(this.prvMultiTab.reject)
+          localStorage.unsubscribe(this.prvMultiTab.enter)
+          localStorage.unsubscribe(this.prvMultiTab.switch)
+        }
+      }
+
+      this.prvMultiTab.reject = localStorage.subscribe(constants.localStorage.reject, onRejectHandle)
+      this.prvMultiTab.enter = localStorage.subscribe(constants.localStorage.enter, onEnterHandle)
+      this.prvMultiTab.switch = localStorage.subscribe(constants.localStorage.switch, onSwitchHangle)
+
+      localStorage.setItem(constants.localStorage.enter, newId)
     })
+
+  }
+
+  componentWillMount() {
+    const { currencies } = this.props
+
+    this.preventMultiTabs()
+
+    const isWalletCreate = localStorage.getItem(constants.localStorage.isWalletCreate)
+
+    if (!isWalletCreate) {
+      currencies.forEach(({ name }) => {
+        if (name !== "BTC") {
+          actions.core.markCoinAsHidden(name)
+        }
+      })
+    }
 
     if (!localStorage.getItem(constants.localStorage.demoMoneyReceived)) {
       actions.user.getDemoMoney()
@@ -105,29 +176,35 @@ export default class App extends React.Component {
     window.prerenderReady = true
   }
 
-  componentWillUnmount() {
+  componentDidUpdate() {
     if (process.env.MAINNET) {
       firebase.setUserLastOnline()
     }
   }
 
+  handleSwitchTab = () => {
+    this.setState({
+      multiTabs: false,
+    })
+    this.preventMultiTabs(true)
+  }
+
   render() {
     const { fetching, multiTabs, error } = this.state
-    const { children, ethAddress, btcAddress, tokenAddress, history /* eosAddress */ } = this.props
+    const { children, ethAddress, btcAddress, tokenAddress, history } = this.props
     const isFetching = !ethAddress || !btcAddress || (!tokenAddress && config && !config.isWidget) || !fetching
 
     const isWidget = history.location.pathname.includes('/exchange') && history.location.hash === '#widget'
     const isCalledFromIframe = window.location !== window.parent.location
     const isWidgetBuild = config && config.isWidget
 
-    const isNew = history.location.pathname.includes('/+NewPage')
     if (isWidgetBuild && localStorage.getItem(constants.localStorage.didWidgetsDataSend) !== 'true') {
       firebase.submitUserDataWidget('usersData')
       localStorage.setItem(constants.localStorage.didWidgetsDataSend, true)
     }
 
     if (multiTabs) {
-      return <PreventMultiTabs />
+      return <PreventMultiTabs onSwitchTab={this.handleSwitchTab} />
     }
 
     if (isFetching) {
@@ -141,7 +218,7 @@ export default class App extends React.Component {
           <Core />
           <RequestLoader />
           <ModalConductor />
-          <NotificationConductor />
+          <NotificationConductor history={history} />
         </Fragment>
       )
       : (
@@ -149,7 +226,7 @@ export default class App extends React.Component {
           <Seo location={history.location} />
           <Header />
           <Wrapper>
-            <WidthContainer styleName={isWidgetBuild ? 'main main_widget' : 'main'}>
+            <WidthContainer id="swapComponentWrapper" styleName={isWidgetBuild ? 'main main_widget' : 'main'}>
               <main>
                 {children}
               </main>
@@ -159,29 +236,10 @@ export default class App extends React.Component {
           <Footer />
           <RequestLoader />
           <ModalConductor />
-          <NotificationConductor />
+          <NotificationConductor history={history} />
         </Fragment>
       )
 
-    const newMain = (
-      <Fragment>
-        <Seo location={history.location} />
-        { /* <Header /> */ }
-        <main>
-          {children}
-        </main>
-        <Core />
-        { /* !isMobile && <Footer /> */ }
-        <RequestLoader />
-        <ModalConductor />
-        <NotificationConductor />
-      </Fragment>
-    )
-
-    return (
-      process.env.LOCAL === 'local'
-        ? (<HashRouter>{!isNew ? mainContent : newMain}</HashRouter>)
-        : !isNew ? mainContent : newMain
-    )
+    return <HashRouter>{mainContent}</HashRouter>
   }
 }

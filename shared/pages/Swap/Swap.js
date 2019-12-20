@@ -29,14 +29,14 @@ const isWidgetBuild = config && config.isWidget
 
 @injectIntl
 @connect(({
-  user: { ethData, btcData, bchData, tokensData, eosData, telosData, nimData, ltcData /* usdtOmniData */},
+  user: { ethData, btcData, bchData, tokensData, nimData, ltcData /* usdtOmniData */ },
   ipfs: { peer },
   rememberedOrders,
 }) => ({
-  items: [ ethData, btcData, eosData, telosData, bchData, ltcData /* nimData, usdtOmniData */ ],
-  tokenItems: [ ...Object.keys(tokensData).map(k => (tokensData[k])) ],
-  currenciesData: [ ethData, btcData, eosData, telosData, bchData, ltcData /* nimData, usdtOmniData */ ],
-  tokensData: [ ...Object.keys(tokensData).map(k => (tokensData[k])) ],
+  items: [ethData, btcData, bchData, ltcData /* nimData, usdtOmniData */],
+  tokenItems: [...Object.keys(tokensData).map(k => (tokensData[k]))],
+  currenciesData: [ethData, btcData, bchData, ltcData /* nimData, usdtOmniData */],
+  tokensData: [...Object.keys(tokensData).map(k => (tokensData[k]))],
   errors: 'api.errors',
   checked: 'api.checked',
   decline: rememberedOrders.savedOrders,
@@ -73,7 +73,7 @@ export default class SwapComponent extends PureComponent {
 
   componentWillMount() {
     const { items, tokenItems, currenciesData, tokensData, intl: { locale }, deletedOrders } = this.props
-    let { match : { params : { orderId } }, history, location: { pathname } } = this.props
+    let { match: { params: { orderId } }, history, location: { pathname } } = this.props
 
     if (!!window.performance && window.performance.navigation.type === 2) {
       window.location.reload()
@@ -244,7 +244,7 @@ export default class SwapComponent extends PureComponent {
   }
 
   isBalanceEnough = () => {
-    const { swap  } = this.state
+    const { swap } = this.state
     const { flow, sellCurrency } = swap
     const { step, balance, isBalanceEnough } = flow.state
 
@@ -302,7 +302,7 @@ export default class SwapComponent extends PureComponent {
         buyCurrency,
         buyAmount,
         sellCurrency,
-        sellAmount
+        sellAmount,
       },
       isFaucetRequested,
       continueSwap,
@@ -434,23 +434,9 @@ export default class SwapComponent extends PureComponent {
     }
 
     const isFinished = (swap.flow.state.step >= (swap.flow.steps.length - 1))
-
     return (
       <Fragment>
-        {hideAll ?
-          <div>
-            <h3 styleName="canceled" /* eslint-disable-line */ onClick={this.goWallet}>
-              <FormattedMessage id="swappropgress327" defaultMessage="this Swap is canceled" />
-            </h3>
-            <div>
-              <h3 styleName="refHex">
-                <FormattedMessage
-                  id="swappropgress400"
-                  defaultMessage="Refund is taking automatically"
-                />
-              </h3>
-            </div>
-          </div> :
+        {!hideAll ?
           <div styleName={isMobile ? 'swap swapMobile' : 'swap'}>
             <SwapComponent
               tokenItems={tokenItems}
@@ -483,6 +469,19 @@ export default class SwapComponent extends PureComponent {
                 isShowingBitcoinScript={isShowingBitcoinScript} />
               {peer === swap.owner.peer && (<DeleteSwapAfterEnd swap={swap} />)}
             </SwapComponent>
+          </div> :
+          <div>
+            <h3 styleName="canceled" /* eslint-disable-line */ onClick={this.goWallet}>
+              <FormattedMessage id="swappropgress327" defaultMessage="this Swap is canceled" />
+            </h3>
+            <div>
+              <h3 styleName="refHex">
+                <FormattedMessage
+                  id="swappropgress400"
+                  defaultMessage="Refund is taking automatically"
+                />
+              </h3>
+            </div>
           </div>
         }
       </Fragment>
